@@ -19,6 +19,13 @@ const teamLabels = {
   zero: "Team Net Zero",
   power: "Team Renewables",
 };
+const storage = (function () {
+  try {
+    return window.localStorage;
+  } catch (error) {
+    return null;
+  }
+})();
 
 // Attedance Tracker
 let count = 0;
@@ -31,17 +38,35 @@ let teamCounts = {
 let attendees = [];
 
 function saveState() {
+  if (!storage) {
+    return;
+  }
+
   const state = {
     count: count,
     teamCounts: teamCounts,
     attendees: attendees,
   };
 
-  localStorage.setItem(storageKey, JSON.stringify(state));
+  try {
+    storage.setItem(storageKey, JSON.stringify(state));
+  } catch (error) {
+    // Ignore storage errors so check-in still works in restricted browsers.
+  }
 }
 
 function loadState() {
-  const savedState = localStorage.getItem(storageKey);
+  if (!storage) {
+    return;
+  }
+
+  let savedState = null;
+
+  try {
+    savedState = storage.getItem(storageKey);
+  } catch (error) {
+    return;
+  }
 
   if (!savedState) {
     return;
@@ -61,10 +86,22 @@ function loadState() {
     }
 
     if (Array.isArray(parsedState.attendees)) {
-      attendees = parsedState.attendees;
+      attendees = parsedState.attendees.map(function (attendee) {
+        const team = attendee.team || "water";
+
+        return {
+          name: attendee.name || "Unnamed attendee",
+          team: team,
+          teamLabel: attendee.teamLabel || teamLabels[team] || team,
+        };
+      });
     }
   } catch (error) {
-    localStorage.removeItem(storageKey);
+    try {
+      storage.removeItem(storageKey);
+    } catch (removeError) {
+      // Ignore cleanup failures.
+    }
   }
 }
 
@@ -104,7 +141,7 @@ function renderAttendeeList() {
 
     const teamSpan = document.createElement("span");
     teamSpan.className = "attendee-team";
-    teamSpan.textContent = attendee.teamLabel;
+    teamSpan.textContent = attendee.teamLabel || teamLabels[attendee.team];
 
     listItem.appendChild(nameSpan);
     listItem.appendChild(teamSpan);
